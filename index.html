@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Waste-Wise Municipal Dashboard</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* --- CSS STYLES --- */
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+        :root {
+            --primary-color: #7494ec; /* Changed to match log.html primary color */
+            --primary-hover: #5a7edc;
+            --dark-grey: #333;
+            --medium-grey: #555;
+            --light-grey: #f4f4f4;
+            --border-color: #ddd;
+            --text-color: #333;
+            --sidebar-bg: #fff;
+            --body-bg: #f9f9f9;
+            --shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+
+            --status-normal: #4CAF50;
+            --status-almost-full: #ffc107;
+            --status-critical: #f44336;
+            --status-dry: #607d8b;
+            --status-wet: #2196f3;
+            --status-hazardous: #9c27b0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--body-bg);
+            color: var(--text-color);
+            min-height: 100vh;
+        }
+
+        .main-container {
+            display: none; /* Initially hidden */
+            width: 100%;
+            height: 100vh;
+        }
+
+        .main-container.active {
+            display: flex;
+        }
+
+        /* --- Main Layout --- */
+        .sidebar {
+            width: 240px;
+            background: var(--sidebar-bg);
+            padding: 1.5rem 0;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem 1.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            margin-right: 0.8rem;
+        }
+
+        .sidebar-header h1 {
+            font-size: 1.5rem;
+            color: var(--dark-grey);
+        }
+
+        .sidebar ul {
+            list-style-type: none;
+        }
+
+        .sidebar ul li a {
+            display: block;
+            padding: 1rem 1.5rem;
+            text-decoration: none;
+            color: var(--medium-grey);
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .sidebar ul li.active a,
+        .sidebar ul li a:hover {
+            background-color: #e8f0fe;
+            color: var(--primary-color);
+            border-left-color: var(--primary-color);
+        }
+
+
+        .content {
+            flex-grow: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            max-height: 100vh;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .page-header h2 {
+            font-size: 1.8rem;
+            color: var(--dark-grey);
+        }
+
+        .last-updated {
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .page-subtitle {
+            margin-bottom: 1.5rem;
+            color: #777;
+            font-size: 1rem;
+        }
+
+        /* --- Dashboard --- */
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background-color: #fff;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            border-left: 5px solid var(--primary-color);
+        }
+        .card.status-normal { border-left-color: var(--status-normal); }
+        .card.status-almost-full { border-left-color: var(--status-almost-full); }
+        .card.status-critical { border-left-color: var(--status-critical); }
+
+        .card h4 {
+            margin-bottom: 1rem;
+            color: var(--medium-grey);
+            font-weight: 500;
+        }
+
+        .card-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--dark-grey);
+        }
+
+        .stat-number.green {
+            color: var(--status-normal);
+        }
+
+        .card-desc {
+            color: #888;
+            font-size: 0.9rem;
+            max-width: 100px;
+        }
+
+        .card-desc.urgent {
+            background-color: var(--status-critical); color: white; padding: 4px 8px; border-radius: 4px;
+        }
+        .card-desc.schedule {
+            background-color: var(--status-almost-full); color: var(--dark-grey); padding: 4px 8px; border-radius: 4px;
+        }
+
+
+        #map {
+            height: 400px;
+            width: 100%;
+            border-radius: 8px;
+            margin: 1rem 0 2rem;
+            box-shadow: var(--shadow);
+        }
+
+        /* Custom Map Marker */
+        .marker-pin {
+            width: 20px;
+            height: 20px;
+            border-radius: 50% 50% 50% 0;
+            position: absolute;
+            transform: rotate(-45deg);
+            left: 50%;
+            top: 50%;
+            margin: -10px 0 0 -10px;
+            border: 2px solid #fff;
+        }
+        
+        .bin-cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .bin-card {
+            background-color: #fff;
+            padding: 1.2rem;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .bin-id {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .bin-type-icon {
+            font-size: 0.9rem;
+            padding: 5px 10px;
+            border-radius: 15px;
+            color: white;
+        }
+
+        .bin-type-icon.dry { background-color: var(--status-dry); }
+        .bin-type-icon.wet { background-color: var(--status-wet); }
+        .bin-type-icon.hazardous { background-color: var(--status-hazardous); }
+
+        .bin-location {
+            color: #777;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .fill-level-bar {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            height: 12px;
+            overflow: hidden;
+            margin-top: auto;
+        }
+
+        .fill-level-progress {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+
+        .bin-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+        .fill-level-text {
+            font-weight: 500;
+        }
+
+        .last-updated-bin {
+            font-size: 0.8rem;
+        }
+
+
+        /* --- Alerts --- */
+        .alerts-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .alert-item {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-left: 5px solid;
+            transition: all 0.3s ease;
+        }
+
+        .alert-item.overflow { border-left-color: var(--status-critical); }
+        .alert-item.almost-full { border-left-color: var(--status-almost-full); }
+
+        .alert-icon { font-size: 1.5rem; }
+        .alert-icon.overflow { color: var(--status-critical); }
+        .alert-icon.almost-full { color: var(--status-almost-full); }
+
+        .alert-details {
+            flex-grow: 1;
+        }
+
+        .alert-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .alert-bin-id { font-weight: 700; font-size: 1.1rem; }
+
+        .alert-tag {
+            font-size: 0.8rem;
+            font-weight: 500;
+            padding: 3px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+        .alert-tag.overflow { background-color: var(--status-critical); }
+        .alert-tag.almost-full { background-color: var(--status-almost-full); color: var(--dark-grey);}
+
+        .alert-meta {
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+        .alert-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .alert-fill-level { font-size: 1.5rem; font-weight: 700; }
+        .alert-waste-type { color: #555; }
+
+        .alert-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-action {
+            padding: 0.6rem 1rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+
+        .btn-urgent {
+            background-color: var(--status-critical);
+            color: white;
+        }
+        .btn-urgent:hover { background-color: #d32f2f; }
+
+        .btn-schedule {
+            background-color: var(--status-almost-full);
+            color: var(--dark-grey);
+        }
+        .btn-schedule:hover { background-color: #ffb300; }
+
+        .btn-resolve {
+            background-color: transparent;
+            border: 1px solid #ccc;
+            color: #555;
+            font-size: 1.2rem;
+            padding: 0.5rem;
+            width: 36px;
+            height: 36px;
+            line-height: 1;
+        }
+        .btn-resolve:hover { background-color: #f0f0f0; }
+
+        .alert-expanded-content {
+            display: none;
+            padding: 1rem 0;
+            grid-template-columns: 1fr 2fr;
+            gap: 1rem;
+            align-items: center;
+        }
+        .alert-item.expanded .alert-expanded-content {
+            display: grid;
+        }
+        .additional-details p {
+            font-size: 0.9rem;
+            margin-bottom: 0.4rem;
+            color: #555;
+        }
+        .additional-details p strong {
+            color: #333;
+            display: inline-block;
+            width: 90px;
+        }
+        .trend-chart-container {
+            height: 80px;
+        }
+
+        /* --- Analytics --- */
+        .charts-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            /* Add this for mobile scroll fix */
+            max-width: 100vw;
+            overflow-x: auto;
+        }
+        .chart-card {
+            min-width: 0;
+            /* Prevent chart overflow */
+        }
+        canvas {
+            width: 100% !important;
+            height: 220px !important;
+            max-width: 100%;
+            display: block;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 900px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                padding: 1rem 0;
+            }
+            .content {
+                padding: 1rem;
+                max-height: none;
+            }
+            .charts-container {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            .insights-container {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            .stats-cards {
+                grid-template-columns: 1fr 1fr;
+                gap: 1rem;
+            }
+        }
+        @media (max-width: 600px) {
+            .sidebar-header h1 {
+                font-size: 1.1rem;
+            }
+            .stats-cards {
+                grid-template-columns: 1fr;
+            }
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            .insights-container {
+                grid-template-columns: 1fr;
+            }
+            .content {
+                padding: 0.5rem;
+            }
+            .card, .chart-card, .insight-card {
+                padding: 1rem;
+            }
+
+            /* Responsive Login Page */
+            #login-page {
+                padding: 0;
+                min-height: 100vh;
+                height: 100vh;
+                align-items: flex-start;
+            }
+            .login-modern-container {
+                max-width: 100vw;
+                padding: 0.5rem;
+                height: 100vh;
+                display: flex;
+                align-items: flex-start;
+                justify-content: center;
+            }
+            .login-modern-container h2 {
+                font-size: 1.3rem;
+            }
+            .input-box input {
+                font-size: 0.98rem;
+                padding: 0.7rem;
+            }
+            .btn-modern-login {
+                font-size: 1rem;
+                padding: 0.7rem;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .login-modern-container {
+                padding: 0.7rem 0.3rem;
+            }
+            .login-modern-container h2 {
+                font-size: 1.05rem;
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <iframe src="log.html" id="login-iframe" style="border:none;width:100vw;height:100vh;position:fixed;top:0;left:0;z-index:9999;background:#fff;"></iframe>
+
+    <div class="main-container" style="display:none;">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <img src="1.png" alt="Shayaak" class="logo-icon">
+                <h1>Shayaak</h1>
+            </div>
+            <ul>
+                <li class="active" data-page="dashboard"><a href="#">Dashboard</a></li>
+                <li data-page="alerts"><a href="#">Alerts</a></li>
+                <li data-page="analytics"><a href="#">Analytics</a></li>
+                <li data-page="logout"><a href="#">Logout</a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <div id="dashboard-page" class="page">
+                <div class="page-header">
+                    <h2>Dashboard</h2>
+                    <span class="last-updated">Last updated: Just now</span>
+                </div>
+                <h3>Sahayaak Dashboard</h3>
+                <p class="page-subtitle">Monitor all waste collection points in real-time</p>
+                <div class="stats-cards">
+                    <div class="card"><h4>Total Bins</h4><div class="card-content"><span class="stat-number">12</span><span class="card-desc">Active monitoring</span></div></div>
+                    <div class="card status-normal"><h4>Normal Status</h4><div class="card-content"><span class="stat-number">7</span><span class="card-desc">Below 80% capacity</span></div></div>
+                    <div class="card status-almost-full"><h4>Almost Full</h4><div class="card-content"><span class="stat-number">3</span><span class="card-desc">80-95% capacity</span></div></div>
+                    <div class="card status-critical"><h4>Critical</h4><div class="card-content"><span class="stat-number">2</span><span class="card-desc">95%+ capacity</span></div></div>
+                </div>
+                <h3>Live Map View</h3>
+                <div id="map"></div>
+                <h3>Waste Collection Points</h3>
+                <div class="bin-cards-container">
+                    </div>
+            </div>
+
+            <div id="alerts-page" class="page">
+                <div class="page-header">
+                    <h2>Alerts & Notifications</h2>
+                    <span class="last-updated">Last updated: 18:39</span>
+                </div>
+                <p class="page-subtitle">Monitor bins requiring immediate attention</p>
+                <div class="stats-cards">
+                     <div class="card status-critical"><h4>Critical Alerts</h4><div class="card-content"><span class="stat-number">2</span><span class="card-desc urgent">Immediate action required</span></div></div>
+                    <div class="card status-almost-full"><h4>Warning Alerts</h4><div class="card-content"><span class="stat-number">2</span><span class="card-desc schedule">Schedule pickup soon</span></div></div>
+                    <div class="card"><h4>Total Monitored</h4><div class="card-content"><span class="stat-number">12</span><span class="card-desc">All collection points</span></div></div>
+                </div>
+                <h3>Active Alerts</h3>
+                <div class="alerts-list">
+                   </div>
+            </div>
+
+            <div id="analytics-page" class="page">
+                <div class="page-header">
+                    <h2>Analytics & Insights</h2>
+                     <span class="last-updated">Last updated: Just now</span>
+                </div>
+                <p class="page-subtitle">Performance metrics and waste management analytics</p>
+                 <div class="stats-cards">
+                    <div class="card"><h4>Efficiency Score</h4><div class="card-content"><span class="stat-number green">83%</span><span class="card-desc">System performance</span></div></div>
+                    <div class="card"><h4>Avg Fill Level</h4><div class="card-content"><span class="stat-number">73%</span><span class="card-desc">Across all bins</span></div></div>
+                    <div class="card"><h4>Fuel Saved</h4><div class="card-content"><span class="stat-number green">247L</span><span class="card-desc">This month</span></div></div>
+                    <div class="card"><h4>CO₂ Reduced</h4><div class="card-content"><span class="stat-number green">1.2T</span><span class="card-desc">Carbon footprint</span></div></div>
+                </div>
+                <div class="charts-container">
+                    <div class="chart-card">
+                        <h4>Waste Type Distribution</h4>
+                        <p>Distribution of bin types across the system</p>
+                        <canvas id="wasteTypeChart" height="220"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h4>Average Fill Level by Ward</h4>
+                        <p>Comparison of fill levels across different wards</p>
+                        <canvas id="avgFillLevelChart" height="220"></canvas>
+                    </div>
+                </div>
+                <div class="charts-container">
+                    <div class="chart-card full-width">
+                        <h4>Pickup Trends</h4>
+                        <p>Monthly pickup statistics</p>
+                        <canvas id="pickupTrendsChart" height="220"></canvas>
+                    </div>
+                </div>
+                 <h3>Optimization Insights</h3>
+                 <p class="page-subtitle">AI-powered recommendations for improved efficiency</p>
+                 <div class="insights-container">
+                    <div class="insight-card">
+                        <h4>Route Optimization</h4>
+                        <p>Implementing optimized pickup routes could reduce fuel consumption by 23% and save approximately 155L of fuel monthly.</p>
+                    </div>
+                    <div class="insight-card">
+                        <h4>Predictive Maintenance</h4>
+                        <p>Ward 14 shows higher fill rates. Consider adding 2 additional bins to reduce overflow incidents by 40%.</p>
+                    </div>
+                 </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <script>
+        // --- JAVASCRIPT LOGIC ---
+        document.addEventListener('DOMContentLoaded', function() {
+            // Listen for login success from log.html (use postMessage for communication)
+            window.addEventListener('message', function(event) {
+                if (event.data === 'login-success') {
+                    document.getElementById('login-iframe').style.display = 'none';
+                    document.querySelector('.main-container').style.display = 'flex';
+                    showPage('dashboard');
+                    initDashboard();
+                }
+            });
+
+            // --- Page State & Data ---
+            const pages = document.querySelectorAll('.main-container .page');
+            const navLinks = document.querySelectorAll('.sidebar ul li');
+            const mainContainer = document.querySelector('.main-container');
+
+            const binData = [
+                { id: 'BIN-001', location: 'Park Street', fillLevel: 25, type: 'Wet', updated: 1, lat: 22.55, lon: 88.35 },
+                { id: 'BIN-002', location: 'Salt Lake, Sector V', fillLevel: 65, type: 'Hazardous', updated: 2, lat: 22.57, lon: 88.43 },
+                { id: 'BIN-003', location: 'Market Area', fillLevel: 97, type: 'Hazardous', updated: 5, lat: 22.58, lon: 88.38 },
+                { id: 'BIN-004', location: 'Gariahat', fillLevel: 80, type: 'Dry', updated: 1, lat: 22.51, lon: 88.36 },
+                { id: 'BIN-005', location: 'Bus Stand', fillLevel: 78, type: 'Wet', updated: 2, lat: 22.60, lon: 88.37 },
+                { id: 'BIN-006', location: 'Main Plaza', fillLevel: 91, type: 'Dry', updated: 2, lat: 22.56, lon: 88.40 },
+                { id: 'BIN-007', location: 'Medical Center', fillLevel: 73, type: 'Hazardous', updated: 2, lat: 22.54, lon: 88.39 },
+                { id: 'BIN-008', location: 'Food Court', fillLevel: 97, type: 'Wet', updated: 2, lat: 22.53, lon: 88.34 },
+                { id: 'BIN-009', location: 'Shopping Mall', fillLevel: 34, type: 'Dry', updated: 2, lat: 22.59, lon: 88.41 },
+                { id: 'BIN-010', location: 'Restaurant Strip', fillLevel: 95, type: 'Wet', updated: 2, lat: 22.52, lon: 88.38 },
+                { id: 'BIN-011', location: 'Industrial Zone', fillLevel: 56, type: 'Hazardous', updated: 2, lat: 22.62, lon: 88.42 },
+                { id: 'BIN-012', location: 'Office Complex', fillLevel: 91, type: 'Dry', updated: 2, lat: 22.55, lon: 88.44 },
+            ];
+
+            const alertsData = [
+                { binId: 'BIN-003', status: 'Overflow', location: 'Ward 13 - Market Area', time: 5, fillLevel: 97, wasteType: 'Hazardous' },
+                { binId: 'BIN-010', status: 'Overflow', location: 'Ward 15 - Restaurant Strip', time: 19, fillLevel: 95, wasteType: 'Wet' },
+                { binId: 'BIN-002', status: 'Almost Full', location: 'Ward 12 - Hospital Road', time: 22, fillLevel: 82, wasteType: 'Wet' },
+                { binId: 'BIN-006', status: 'Almost Full', location: 'Ward 14 - Main Plaza', time: 12, fillLevel: 91, wasteType: 'Dry' },
+            ];
+
+
+            // --- Functions ---
+
+            // Function to switch between pages
+            function showPage(pageId) {
+                pages.forEach(page => {
+                    page.classList.remove('active');
+                });
+                document.getElementById(pageId + '-page').classList.add('active');
+
+                navLinks.forEach(link => {
+                    link.classList.remove('active');
+                    if (link.dataset.page === pageId) {
+                        link.classList.add('active');
+                    }
+                });
+                
+                // Initialize charts only when the analytics page is shown
+                if (pageId === 'analytics') {
+                    initAnalyticsCharts();
+                }
+            }
+
+            // Logout Handler
+            document.querySelector('li[data-page="logout"]').addEventListener('click', (e) => {
+                e.preventDefault();
+                mainContainer.style.display = 'none';
+                document.getElementById('login-iframe').style.display = 'block';
+            });
+
+            // Navigation Handler
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const pageId = this.dataset.page;
+                    if (pageId !== 'logout') {
+                        showPage(pageId);
+                    }
+                });
+            });
+
+            // Get color based on fill level
+            function getFillColor(level) {
+                if (level >= 95) return 'var(--status-critical)';
+                if (level >= 80) return 'var(--status-almost-full)';
+                return 'var(--status-normal)';
+            }
+            
+            // Get status text based on fill level
+            function getStatusText(level) {
+                if (level >= 95) return 'OVERFLOW';
+                if (level >= 80) return 'ALMOST FULL';
+                return 'NORMAL';
+            }
+
+            // Populate Bins on Dashboard
+            function populateDashboardBins() {
+                const container = document.querySelector('.bin-cards-container');
+                container.innerHTML = '';
+                binData.forEach(bin => {
+                    const statusText = getStatusText(bin.fillLevel);
+                    const color = getFillColor(bin.fillLevel);
+                    
+                    const card = document.createElement('div');
+                    card.className = 'bin-card';
+                    card.innerHTML = `
+                        <div class="bin-header">
+                            <span class="bin-id">${bin.id}</span>
+                            <span class="bin-type-icon ${bin.type.toLowerCase()}">${bin.type}</span>
+                        </div>
+                        <p class="bin-location">${bin.location}</p>
+                        <div class="fill-level-bar">
+                            <div class="fill-level-progress" style="width: ${bin.fillLevel}%; background-color: ${color};"></div>
+                        </div>
+                        <div class="bin-footer">
+                            <span class="fill-level-text" style="color: ${color};">${statusText}</span>
+                            <span class="fill-level-value">${bin.fillLevel}% Full</span>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            }
+
+            // Populate Alerts Page
+            function populateAlerts() {
+                const container = document.querySelector('.alerts-list');
+                container.innerHTML = '';
+                alertsData.forEach(alert => {
+                    const isOverflow = alert.status === 'Overflow';
+                    const statusClass = isOverflow ? 'overflow' : 'almost-full';
+                    const item = document.createElement('div');
+                    item.className = `alert-item ${statusClass}`;
+                    item.innerHTML = `
+                        <div class="alert-icon ${statusClass}">
+                            &#9888; </div>
+                        <div class="alert-details">
+                            <div class="alert-header">
+                                <span class="alert-bin-id">${alert.binId}</span>
+                                <span class="alert-tag ${statusClass}">${alert.status}</span>
+                            </div>
+                            <div class="alert-meta">${alert.location} &bull; ${alert.time} min ago</div>
+                        </div>
+                        <div class="alert-info">
+                            <span class="alert-fill-level">${alert.fillLevel}%</span>
+                            <span class="alert-waste-type">${alert.wasteType} Waste</span>
+                        </div>
+                        <div class="alert-actions">
+                            <button class="btn-action ${isOverflow ? 'btn-urgent' : 'btn-schedule'}">${isOverflow ? 'Urgent Pickup' : 'Schedule Pickup'}</button>
+                            <button class="btn-resolve">&#10003;</button> </div>
+                    `;
+                    container.appendChild(item);
+                });
+            }
+            
+            // Initialize Dashboard
+            let mapInitialized = false;
+            function initDashboard() {
+                if (mapInitialized) return;
+                populateDashboardBins();
+                populateAlerts(); 
+                
+                // Initialize Leaflet Map
+                const map = L.map('map').setView([22.5726, 88.3639], 12); // Centered on Kolkata
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenStreetMap'
+                }).addTo(map);
+
+                binData.forEach(bin => {
+                    const color = getFillColor(bin.fillLevel);
+                    const customIcon = L.divIcon({
+                        className: 'custom-map-marker',
+                        html: `<div style="background-color:${color};" class="marker-pin"></div>`,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+
+                    const marker = L.marker([bin.lat, bin.lon], { icon: customIcon }).addTo(map);
+                    marker.bindPopup(`<b>${bin.id}</b><br>${bin.location}<br>Fill Level: ${bin.fillLevel}%<br>Status: ${getStatusText(bin.fillLevel)}`);
+                });
+                mapInitialized = true;
+            }
+
+            // Initialize Analytics Charts
+            let wasteTypeChart, avgFillLevelChart, pickupTrendsChart;
+
+            function initAnalyticsCharts() {
+                // Waste Type Distribution Chart
+                const wasteTypeCtx = document.getElementById('wasteTypeChart').getContext('2d'); // <-- FIXED
+                if (wasteTypeChart) wasteTypeChart.destroy();
+                wasteTypeChart = new Chart(wasteTypeCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: ['Wet Waste', 'Dry Waste', 'Hazardous'],
+                        datasets: [{
+                            data: [4, 5, 3],
+                            backgroundColor: ['#2196f3', '#607d8b', '#9c27b0'],
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+
+                // Average Fill Level Chart
+                const avgFillLevelCtx = document.getElementById('avgFillLevelChart').getContext('2d');
+                if (avgFillLevelChart) avgFillLevelChart.destroy();
+                avgFillLevelChart = new Chart(avgFillLevelCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Ward 12', 'Ward 13', 'Ward 14', 'Ward 15'],
+                        datasets: [{
+                            label: 'Avg Fill Level (%)',
+                            data: [68, 75, 82, 65],
+                            backgroundColor: '#4CAF50'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                });
+
+                // Pickup Trends Chart
+                const pickupTrendsCtx = document.getElementById('pickupTrendsChart').getContext('2d');
+                if (pickupTrendsChart) pickupTrendsChart.destroy();
+                pickupTrendsChart = new Chart(pickupTrendsCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May'],
+                        datasets: [{
+                            label: 'Total Pickups',
+                            data: [50, 55, 45, 61, 58],
+                            borderColor: '#4CAF50',
+                            tension: 0.4,
+                            fill: false
+                        }, {
+                            label: 'Urgent Pickups',
+                            data: [10, 12, 8, 15, 11],
+                            borderColor: '#f44336',
+                            tension: 0.4,
+                            fill: false
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            // --- Initial Load ---
+            // Show the login page by default
+            loginPage.classList.add('active');
+
+        });
+    </script>
+</body>
+</html>
