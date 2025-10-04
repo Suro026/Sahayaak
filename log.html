@@ -263,7 +263,7 @@
             <form action="#" id="log">
                 <h1>Login</h1>
                 <div class="input-box">
-                    <input type="text" placeholder="Username" id="unamelog" required>
+                    <input type="email" placeholder="Email" id="unamelog" required>
                     <i class='bx bxs-user'></i>
                 </div>
                 <div class="input-box">
@@ -334,6 +334,22 @@
             container.classList.remove('active');
         });
     </script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-auth-compat.js"></script>
+
+<script>
+  const firebaseConfig = {
+  apiKey: "AIzaSyDcZNs99gCjHfvA-6hejDFB9fCs4VR2pGE",
+  authDomain: "sahayaak-76db9.firebaseapp.com",
+  projectId: "sahayaak-76db9",
+  storageBucket: "sahayaak-76db9.firebasestorage.app",
+  messagingSenderId: "285504064383",
+  appId: "1:285504064383:web:a1f26a7fc3b722d979284a",
+  measurementId: "G-52W48S6Y0M"
+};
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+</script>
     <script src="log.js"></script>
 </body>
 </html>
