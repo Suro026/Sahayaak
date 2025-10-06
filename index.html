@@ -713,23 +713,48 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function populateAlerts(alerts) {
-        const container = document.querySelector('#alerts-page .alerts-list');
-        if (!container) return;
-        container.innerHTML = '';
-        alerts.forEach(alert => {
-            const isOverflow = alert.status === 'Overflow' || alert.status === 'Low Battery';
-            const statusClass = isOverflow ? 'overflow' : 'almost-full';
-            const item = document.createElement('div');
-            item.className = `alert-item ${statusClass}`;
-            item.innerHTML = `
-                <div class="alert-icon ${statusClass}">&#9888;</div>
-                <div class="alert-details"><div class="alert-header"><span class="alert-bin-id">${alert.binId}</span><span class="alert-tag ${statusClass}">${alert.status}</span></div><div class="alert-meta">${alert.location} &bull; ${alert.time} min ago</div></div>
-                <div class="alert-info"><span class="alert-fill-level">${alert.fillLevel}%</span><span class="alert-waste-type">${alert.wasteType}</span></div>
-                <div class="alert-actions"><button class="btn-action ${isOverflow ? 'btn-urgent' : 'btn-schedule'}">${isOverflow ? 'Acknowledge' : 'Schedule'}</button></div>`;
-            container.appendChild(item);
-        });
+    // Replace your old populateAlerts function with this one
+function populateAlerts(alertingRobots) {
+    const container = document.querySelector('#alerts-page .alerts-list');
+    if (!container) return;
+
+    container.innerHTML = ''; // Clear old alerts
+
+    if (alertingRobots.length === 0) {
+        container.innerHTML = '<div class="alert-item"><div class="alert-details"><p>No active alerts. All systems are operational.</p></div></div>';
+        return;
     }
+
+    alertingRobots.forEach(robot => {
+        const isCritical = robot.healthStatus === 'Critical';
+        const statusClass = isCritical ? 'overflow' : 'almost-full'; // Reuse CSS classes
+        const item = document.createElement('div');
+        item.className = `alert-item ${statusClass}`;
+
+        item.innerHTML = `
+            <div class="alert-icon ${statusClass}">
+                <span style="font-size: 1.5rem;">⚠️</span>
+            </div>
+            <div class="alert-details">
+                <div class="alert-header">
+                    <span class="alert-bin-id">${robot.id}</span>
+                    <span class="alert-tag ${statusClass}">${robot.healthStatus.toUpperCase()}</span>
+                </div>
+                <div class="alert-meta" style="font-size: 1rem; color: #333;">
+                    ${robot.alertMessage}
+                </div>
+            </div>
+            <div class="alert-info">
+                <span class="alert-fill-level">${robot.battery}%</span>
+                <span class="alert-waste-type">Battery</span>
+            </div>
+            <div class="alert-actions">
+                <button class="btn-action ${isCritical ? 'btn-urgent' : 'btn-schedule'}">${isCritical ? 'Dispatch Team' : 'Acknowledge'}</button>
+            </div>
+        `;
+        container.appendChild(item);
+    });
+}
 
     function initAnalyticsCharts() {
         const wasteTypeCtx = document.getElementById('wasteTypeChart').getContext('d');
@@ -772,19 +797,26 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Main real-time listener for robot data
-    db.collection("robots").onSnapshot((querySnapshot) => {
-        const robotData = [];
-        const alertsData = [];
-        querySnapshot.forEach((doc) => {
-            const robot = { id: doc.id, ...doc.data() };
-            robotData.push(robot);
-            if (robot.battery < 20) alertsData.push({ binId: robot.id, status: 'Low Battery', location: 'Returning to Base', time: 1, fillLevel: robot.battery, wasteType: 'System Alert' });
-            if (robot.wetBinLevel > 95) alertsData.push({ binId: robot.id, status: 'Overflow', location: 'Wet Bin Full', time: 2, fillLevel: robot.wetBinLevel, wasteType: 'Wet Waste' });
-        });
-        updateDashboardUI(robotData);
-        updateMapMarkers(robotData);
-        populateAlerts(alertsData);
+    // In your main onSnapshot listener...
+db.collection("robots").onSnapshot((querySnapshot) => {
+    const robotData = [];
+    const alertsData = []; // We will now filter for real alerts
+
+    querySnapshot.forEach((doc) => {
+        const robot = { id: doc.id, ...doc.data() };
+        robotData.push(robot);
+
+        // --- New Alert Filtering ---
+        // Only create an alert if the healthStatus is NOT "Operational"
+        if (robot.healthStatus && robot.healthStatus !== "Operational") {
+            alertsData.push(robot);
+        }
     });
+    
+    updateDashboardUI(robotData);
+    updateMapMarkers(robotData);
+    populateAlerts(alertsData); // This will now receive only robots with active alerts
+      });
 });
 </script>
 </body>
